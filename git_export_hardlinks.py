@@ -2,6 +2,7 @@
 
 from dulwich.repo import Repo
 from collections import namedtuple
+from itertools import imap, chain
 import os
 import os.path
 import stat
@@ -44,6 +45,9 @@ def create_exported_tree_map(repo, tree_sha, path=""):
     return id2path
 
 def tree_iterator(repo, tree_sha, path=""):
+    """Generates all tree nodes recursively.
+    """
+
     tree = repo.tree(tree_sha)
     for entry in tree.iteritems():
         mode = entry.mode
@@ -51,28 +55,84 @@ def tree_iterator(repo, tree_sha, path=""):
             yield entry.in_path(path)
         elif stat.S_ISDIR(mode):
             yield entry.in_path(path)
-            for inner_entry in tree_iterator(repo, entry.sha, entry.path):
+            for inner_entry in tree_iterator(repo, entry.sha, os.path.join(path, entry.path)):
                 yield inner_entry
 
+def _gen_exported_tree_producer(repo, exported_tree):
+    id2path = create_exported_tree_map(repo, exported_tree.tree)
 
-def export(repo, tree_sha, target, exported_trees):
+    def trylink(entry, abs_path):
+        link_source = id2path.get((entry.mode, entry.sha))
+        if link_source:
+            abs_link_source = os.path.join(exported_tree.path, link_source)
+            try:
+                os.link(abs_link_source, abs_path)
+            except OSError as e:
+                if not os.path.exists(abs_link_source):
+                    raise IOError("Link source does not exist: %s" % abs_link_source)
+                elif not os.path.isdir(os.path.basename(abs_path)):
+                    raise IOError("Target dir does not exist for: %s" % abs_path)
+                raise IOError("Could not link %s to %s" % (abs_link_source, abs_path))
+            return True
+        else:
+            return False
+
+    return trylink
+
+def _write_file(abs_path, content):
+    fd = open(abs_path, 'w')
+    fd.write(content)
+    fd.close()
+
+def _gen_repo_producer(repo):
+    def produce(entry, abs_path):
+        blob = repo.get_blob(entry.sha)
+        _write_file(abs_path, blob.as_raw_string())
+        return True
+    return produce
+
+def _ensure_target_is_empty_dir(target):
+    if os.path.isdir(target):
+        if os.listdir(target):
+            raise IOError("Not empty: %s" % target)
+    else:
+        os.mkdir(target)
+
+
+def export(repo, tree_sha, target, exported_trees=[]):
+    """Export a git tree to a target dir using hardlinks from previous exports.
+
+    :param repo: dulwich git Repo instance to export from
+    :param tree_sha: the sha of the git tree object to export
+    :param target: the target folder
+    :param exported_trees: iterable of ExportedTree instances
+    """
+
+    _ensure_target_is_empty_dir(target)
+
     not_found = tree_iterator(repo, tree_sha)
+    producers = chain(imap(lambda _:_gen_exported_tree_producer(repo, _), exported_trees),
+                       [_gen_repo_producer(repo)]
+                       )
 
-    for exported_tree in exported_trees:
-        id2path = create_exported_tree_map(repo, exported_tree.tree)
+    for produce in producers:
+
         export_iter = not_found
         not_found = []
-        for entry in export_iter:
-            if stat.S_ISDIR(entry.mode):
-                #  mkdir -p
-                continue
 
-            link_target = id2path.get((entry.mode, entry.sha))
-            if link_target:
-                pass
-                # link
-            else:
-                not_found.append(entry)
+        for entry in export_iter:
+
+            abs_path = os.path.join(target, entry.path)
+
+            if stat.S_ISDIR(entry.mode) and not os.path.isdir(abs_path):
+                os.mkdir(abs_path)
+            elif stat.S_ISREG or stat.S_ISLNK:
+                written = produce(entry, abs_path)
+                if(not written):
+                    not_found.append(entry)
+
+    if not_found:
+        raise IOError("Some files could not be exported: %s" % ", ".join(map(repr, not_found)))
 
 if __name__ == '__main__':
     args=parse_args()
