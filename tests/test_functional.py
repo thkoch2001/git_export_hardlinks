@@ -71,6 +71,10 @@ class TestFunctional(unittest.TestCase):
         self.assertSameINode(head("dir3/subdir/ephemeral_new"), parent(2, "dir/ephemeral"))
         self.assertSameINode(parent(2, "dir/b"), parent(2, "dir2/a"))
 
+    def test_export_tag(self):
+        git_export_hardlinks.export(self.repo, self.log[0], repr(self.tmp_dir))
+        self.assertFileExists(self.tmp_dir.join("dir3/subdir/ephemeral_new"))
+
     assertFileExists = context.assertFileExists
     assertFileContains = context.assertFileContains
     assertSameINode = context.assertSameINode
