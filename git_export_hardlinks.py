@@ -8,10 +8,11 @@ import os
 import os.path
 import stat
 import argparse
+import sys
 
 ExportedTree = namedtuple('ExportedTree', 'tree, path')
 
-def parse_args():
+def parse_args(argv):
     class SplitLinkOption(argparse.Action):
         def __call__(self, parser, namespace, values, option_string=None):
             exported_trees = []
@@ -31,7 +32,7 @@ def parse_args():
     parser.add_argument("treeish", help="treeish to export TODO: resolve to TREE_SHA1", nargs=1)
     parser.add_argument("target", help="location where to export to", nargs=1)
 
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def create_exported_tree_map(repo, treeish, path=""):
@@ -187,9 +188,12 @@ def _resolve_sha_to_tree(repo, sha):
         pass
         # raise
 
-if __name__ == '__main__':
-    args = parse_args()
+def _main(argv):
+    args = parse_args(argv)
     repo = Repo(os.curdir)
     treeish = _resolve_treeish(repo, args.treeish[0])
 
     export(repo, treeish, args.target[0], args.link)
+
+if __name__ == '__main__':
+    _main(sys.argv)

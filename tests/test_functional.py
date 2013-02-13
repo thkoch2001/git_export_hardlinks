@@ -60,10 +60,10 @@ class TestFunctional(unittest.TestCase):
 
     def test_export_all_trees(self):
         already_exported = []
-        for tree in reversed(self.log):
-            target = self.tmp_dir.join(tree)
-            git_export_hardlinks.export(self.repo, tree, target, reversed(already_exported))
-            already_exported.append(ExportedTree(path=target, tree=tree))
+        for commit in reversed(self.log):
+            target = self.tmp_dir.join(commit)
+            git_export_hardlinks.export(self.repo, commit, target, reversed(already_exported))
+            already_exported.append(ExportedTree(path=target, tree=commit))
 
         head = lambda _: os.path.join(already_exported[-1].path, _)
         parent = lambda x,y: os.path.join(already_exported[-1-x].path, y)
@@ -74,6 +74,18 @@ class TestFunctional(unittest.TestCase):
     def test_export_tag(self):
         git_export_hardlinks.export(self.repo, self.log[0], repr(self.tmp_dir))
         self.assertFileExists(self.tmp_dir.join("dir3/subdir/ephemeral_new"))
+
+    def test_cli_export_with_multiple_exported_trees(self):
+        link_options = ""
+        for commit in reversed(self.log):
+            target = self.tmp_dir.join(commit)
+            sysv = link_options.split()
+            sysv.append(commit)
+            sysv.append(target)
+            link_options += "-l %s,%s" % (commit, target)
+
+        for subdir in os.listdir(repr(self.tmp_dir)):
+            self.assertTrue(subdir in self.log)
 
     assertFileExists = context.assertFileExists
     assertFileContains = context.assertFileContains
