@@ -1,8 +1,9 @@
-#!python
+#!/usr/bin/python
 
 from dulwich.repo import Repo
+from dulwich.objects import parse_tag, parse_commit
 from collections import namedtuple
-from itertools import imap, chain
+from itertools import imap, chain, dropwhile
 import os
 import os.path
 import stat
@@ -33,22 +34,31 @@ def parse_args():
     return parser.parse_args()
 
 
-def create_exported_tree_map(repo, tree_sha, path=""):
+def create_exported_tree_map(repo, treeish, path=""):
+    """Returns a map of (mode, sha) tupples to relative paths.
+
+    A tree can contain duplicate files and thus only one of those files will
+    be in the map.
+
+    :param repo: dulwich Repo instance
+    :param treeish: ref or sha of a treeish
+    :param path: private parametery used for recursion
+    """
     id2path={}
-    tree = repo.tree(tree_sha)
+    tree = repo.tree(_resolve_treeish(repo, treeish))
     for name, mode, sha in tree.iteritems():
         if stat.S_ISREG(mode) or stat.S_ISLNK(mode):
             id2path[(mode, sha)] = os.path.join(path, name)
         elif stat.S_ISDIR(mode):
             id2path.update(create_exported_tree_map(repo, sha, os.path.join(path, name)))
-    # ignore submodules
+    # TODO: what to do about submodules
     return id2path
 
-def tree_iterator(repo, tree_sha, path=""):
+def tree_iterator(repo, treeish, path=""):
     """Generates all tree nodes recursively.
     """
 
-    tree = repo.tree(tree_sha)
+    tree = repo.tree(_resolve_treeish(repo, treeish))
     for entry in tree.iteritems():
         mode = entry.mode
         if stat.S_ISREG(mode) or stat.S_ISLNK(mode):
@@ -99,18 +109,18 @@ def _ensure_target_is_empty_dir(target):
         os.mkdir(target)
 
 
-def export(repo, tree_sha, target, exported_trees=[]):
+def export(repo, treeish, target, exported_trees=[]):
     """Export a git tree to a target dir using hardlinks from previous exports.
 
     :param repo: dulwich git Repo instance to export from
-    :param tree_sha: the sha of the git tree object to export
+    :param treeish: ref or sha of the treeish to export
     :param target: the target folder
     :param exported_trees: iterable of ExportedTree instances
     """
 
     _ensure_target_is_empty_dir(target)
 
-    not_found = tree_iterator(repo, tree_sha)
+    not_found = tree_iterator(repo, treeish)
     producers = chain(imap(lambda _:_gen_exported_tree_producer(repo, _), exported_trees),
                        [_gen_repo_producer(repo)]
                        )
@@ -134,10 +144,52 @@ def export(repo, tree_sha, target, exported_trees=[]):
     if not_found:
         raise IOError("Some files could not be exported: %s" % ", ".join(map(repr, not_found)))
 
-if __name__ == '__main__':
-    args=parse_args()
-    repo=Repo(os.curdir)
-    # TODO resolve treeish to tree_sha1
-    tree_sha1=args.treeish[0]
 
-    export(repo, tree_sha1, args.target[0], args.link)
+def _get_object_field(sha_file, field):
+    """returns the value of a field from a tag or commit sha_file
+    """
+    values = [item[1] for item in parse_tag(sha_file.as_raw_string()) if item[0] == field]
+    # TODO raise for empty values
+    return values[0]
+
+def _could_be_sha(treeish):
+    try:
+        int(treeish, 16)
+        return True
+    except ValueError:
+        return False
+
+def _resolve_treeish(repo, treeish):
+    """Resolve a reference or tag/commit/tree sha to a tree sha
+    """
+    try:
+        sha=repo.ref(treeish)
+        return _resolve_sha_to_tree(repo, sha)
+    except KeyError:
+        if(_could_be_sha(treeish)):
+            return _resolve_sha_to_tree(repo, treeish)
+
+    raise ValueError("Could not resolve treeish %s" % treeish)
+
+def _resolve_sha_to_tree(repo, sha):
+    sha_file = repo.get_object(sha)
+    type_name = sha_file.type_name
+
+    if(type_name == 'tree'):
+        return sha
+    elif(type_name == 'tag'):
+        commit_sha = _get_object_field(sha_file, "object")
+        return _resolve_sha_to_tree(repo, commit_sha)
+    elif(type_name == 'commit'):
+        tree_sha = _get_object_field(sha_file, "tree")
+        return _resolve_sha_to_tree(repo, tree_sha)
+    else:
+        pass
+        # raise
+
+if __name__ == '__main__':
+    args = parse_args()
+    repo = Repo(os.curdir)
+    treeish = _resolve_treeish(repo, args.treeish[0])
+
+    export(repo, treeish, args.target[0], args.link)
