@@ -1,0 +1,6 @@
+#!/usr/bin/env python -u
+
+import sys
+from git_export_hardlinks import _main
+
+sys.exit(_main())

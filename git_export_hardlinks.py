@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 # Copyright 2013 Thomas Koch <thomas@koch.ro>
 #
@@ -26,6 +26,23 @@ import sys
 
 ExportedTree = namedtuple('ExportedTree', 'tree, path')
 
+DESCRIPTION="Git export command that reuses already existing exports and hardlinks files from them."
+LONG_DESCRIPTION="""This package implements a git export command that can be given a list of
+already exported worktrees and the tree SHAs these worktrees correspond
+too. For every file to export it then looks in the existing worktrees whether
+an identical file is already present and in that case hardlinks to the new
+export location instead of writing the same file again.
+
+Use Case: A git based web deployment system that exports git trees to be
+served by a web server. Every new deployment is written to a new folder. After
+the export, the web server should start serving new requests from the new
+folder."""
+
+EPILOG="""Be aware of the dangers of hardlinks. Hardlinks on linux do not
+have copy-on-write semantics! This command also does not verify the integrity
+of old exported trees. Use git reset --hard after this command to guarantee
+a correct export."""
+
 def parse_args(argv):
     class SplitLinkOption(argparse.Action):
         def __call__(self, parser, namespace, values, option_string=None):
@@ -36,8 +53,8 @@ def parse_args(argv):
             setattr(namespace, self.dest, exported_trees)
 
     parser = argparse.ArgumentParser(
-        description="git export that reuses already existing exports and hardlinks files from them.",
-        epilog="Be aware of the dangers of hardlinks. Hardlinks on linux do not have copy-on-write semantics! This command also does not verify the integrity of old exported trees. Use git reset --hard after this command to guarantee a correct export."
+        description=DESCRIPTION,
+        epilog=EPILOG
     )
     parser.add_argument("-l", "--link", help="existing export to hardlink from: TREEISH,PATH. Newest first",
                         action=SplitLinkOption, nargs='*'
@@ -202,7 +219,7 @@ def _resolve_sha_to_tree(repo, sha):
         pass
         # raise
 
-def _main(argv):
+def _main(argv=sys.argv):
     args = parse_args(argv)
     repo = Repo(os.curdir)
     treeish = _resolve_treeish(repo, args.treeish[0])
@@ -210,4 +227,4 @@ def _main(argv):
     export(repo, treeish, args.target[0], args.link)
 
 if __name__ == '__main__':
-    _main(sys.argv)
+    _main()
