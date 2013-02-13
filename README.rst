@@ -71,3 +71,8 @@ Notes:
   file from the git object store.
 
 .. __: http://bugs.python.org/issue9338
+
+License
+-------
+
+Apache 2.0. I don't care too much about licenses. Ask me if you'd prefer another one.
