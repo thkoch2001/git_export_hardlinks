@@ -23,13 +23,13 @@ def parse_args(argv):
 
     parser = argparse.ArgumentParser(
         description="git export that reuses already existing exports and hardlinks files from them.",
-        epilog="Be aware of the dangers of hardlinks. Hardlinks on linux do not have copy-on-write semantics!"
+        epilog="Be aware of the dangers of hardlinks. Hardlinks on linux do not have copy-on-write semantics! This command also does not verify the integrity of old exported trees. Use git reset --hard after this command to guarantee a correct export."
     )
-    parser.add_argument("-l", "--link", help="existing export to hardlink from: TREE_SHA1,PATH. Newest first",
+    parser.add_argument("-l", "--link", help="existing export to hardlink from: TREEISH,PATH. Newest first",
                         action=SplitLinkOption, nargs='*'
                         )
 
-    parser.add_argument("treeish", help="treeish to export TODO: resolve to TREE_SHA1", nargs=1)
+    parser.add_argument("treeish", help="treeish (ref, commit, tree) to export", nargs=1)
     parser.add_argument("target", help="location where to export to", nargs=1)
 
     return parser.parse_args(argv)

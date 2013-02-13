@@ -1,3 +1,6 @@
+- Add an option to allow git_export_hardlink to be run independently of the
+  current path.
+
 - Support git-attributes to limit the files to export
 
   - Do not export files with attribute export-ignore
