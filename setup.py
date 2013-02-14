@@ -27,6 +27,7 @@ setup(
   version="0.1.0",
   author="Thomas Koch",
   author_email="thomas@koch.ro",
+  license="Apache 2.0",
   url="https://github.com/thkoch2001/git_export_hardlinks",
   keywords="git deployment".split(),
   requires = ["dulwich (>=0.8.6)"],
